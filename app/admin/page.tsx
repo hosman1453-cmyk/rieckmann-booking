@@ -1,10 +1,25 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 
 export default function AdminPage() {
   const [appointments, setAppointments] = useState<any[]>([])
+  const router = useRouter()
+
+  // 🔐 AUTH CHECK
+  useEffect(() => {
+    const checkUser = async () => {
+      const { data } = await supabase.auth.getUser()
+
+      if (!data.user) {
+        router.push("/login")
+      }
+    }
+
+    checkUser()
+  }, [router])
 
   const groupedAppointments = (appointments || []).reduce((acc: any, appt: any) => {
     if (!acc[appt.date]) {

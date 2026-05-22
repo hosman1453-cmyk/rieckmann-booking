@@ -43,9 +43,10 @@ export default function BookPage() {
     })
 
     if (error) {
-      alert("Fehler beim Buchen!")
-      return
-    }
+  console.log(error)
+  alert(error.message)
+  return
+}
 
     alert("Termin erfolgreich gebucht!")
 

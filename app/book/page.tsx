@@ -2,8 +2,6 @@
 
 import { useState } from "react"
 import { supabase } from "@/lib/supabase"
-console.log("SUPABASE URL:", process.env.NEXT_PUBLIC_SUPABASE_URL)
-console.log("SUPABASE KEY:", process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
 
 export default function BookPage() {
   const [name, setName] = useState("")

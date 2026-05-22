@@ -6,6 +6,9 @@ import { supabase } from "@/lib/supabase"
 
 export default function AdminPage() {
   const [appointments, setAppointments] = useState<any[]>([])
+  const [filterDate, setFilterDate] = useState("")
+  const [search, setSearch] = useState("")
+
   const router = useRouter()
 
   // 🔐 AUTH CHECK
@@ -20,16 +23,6 @@ export default function AdminPage() {
 
     checkUser()
   }, [router])
-
-  const groupedAppointments = (appointments || []).reduce((acc: any, appt: any) => {
-    if (!acc[appt.date]) {
-      acc[appt.date] = []
-    }
-    acc[appt.date].push(appt)
-    return acc
-  }, {})
-
-  const days = Object.keys(groupedAppointments || {}).sort()
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -58,6 +51,29 @@ export default function AdminPage() {
     fetchAppointments()
   }
 
+  // 🔍 FILTER
+  const filteredAppointments = appointments.filter((a) => {
+    const matchDate = filterDate ? a.date === filterDate : true
+
+    const matchSearch = search
+      ? a.name.toLowerCase().includes(search.toLowerCase())
+      : true
+
+    return matchDate && matchSearch
+  })
+
+  // 📦 GROUP BY DATE
+  const groupedAppointments = (filteredAppointments || []).reduce(
+    (acc: any, appt: any) => {
+      if (!acc[appt.date]) acc[appt.date] = []
+      acc[appt.date].push(appt)
+      return acc
+    },
+    {}
+  )
+
+  const days = Object.keys(groupedAppointments || {}).sort()
+
   return (
     <div
       style={{
@@ -67,6 +83,7 @@ export default function AdminPage() {
         minHeight: "100vh"
       }}
     >
+      {/* HEADER */}
       <div
         style={{
           background: "black",
@@ -80,9 +97,7 @@ export default function AdminPage() {
       >
         <div>
           <h1 style={{ margin: 0 }}>Rieckmann Booking</h1>
-          <p style={{ margin: 0, opacity: 0.7 }}>
-            Admin Dashboard
-          </p>
+          <p style={{ margin: 0, opacity: 0.7 }}>Admin Dashboard</p>
         </div>
 
         <button
@@ -100,16 +115,74 @@ export default function AdminPage() {
         </button>
       </div>
 
+      {/* FILTER BAR */}
+      <div
+        style={{
+          display: "flex",
+          gap: "10px",
+          marginTop: "15px",
+          flexWrap: "wrap"
+        }}
+      >
+        <input
+          type="date"
+          value={filterDate}
+          onChange={(e) => setFilterDate(e.target.value)}
+          style={{ padding: "8px" }}
+        />
+
+        <input
+          placeholder="Name suchen..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{ padding: "8px" }}
+        />
+
+        <button
+          onClick={() => {
+            setFilterDate("")
+            setSearch("")
+          }}
+          style={{
+            padding: "8px 12px",
+            background: "black",
+            color: "white",
+            border: "none",
+            borderRadius: "6px"
+          }}
+        >
+          Reset
+        </button>
+      </div>
+
       {/* STATS */}
       <div style={{ display: "flex", gap: "20px", marginTop: "20px" }}>
-        <div style={{ padding: "20px", background: "black", color: "white", borderRadius: "10px" }}>
+        <div
+          style={{
+            padding: "20px",
+            background: "black",
+            color: "white",
+            borderRadius: "10px"
+          }}
+        >
           <h2>{appointments.length}</h2>
           <p>Total</p>
         </div>
 
-        <div style={{ padding: "20px", background: "#444", color: "white", borderRadius: "10px" }}>
+        <div
+          style={{
+            padding: "20px",
+            background: "#444",
+            color: "white",
+            borderRadius: "10px"
+          }}
+        >
           <h2>
-            {appointments.filter(a => a.date === new Date().toISOString().split("T")[0]).length}
+            {
+              appointments.filter(
+                (a) => a.date === new Date().toISOString().split("T")[0]
+              ).length
+            }
           </h2>
           <p>Today</p>
         </div>
@@ -155,8 +228,7 @@ export default function AdminPage() {
                   border: "1px solid #eee",
                   boxShadow: "0 4px 12px rgba(0,0,0,0.06)",
                   borderRadius: "8px",
-                  background: "white",
-                  cursor: "pointer"
+                  background: "white"
                 }}
               >
                 <b>{appt.name}</b>

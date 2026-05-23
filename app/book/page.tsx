@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 
 export default function BookPage() {
@@ -9,6 +9,9 @@ export default function BookPage() {
   const [time, setTime] = useState("")
   const [service, setService] = useState("")
   const [bookedTimes, setBookedTimes] = useState<string[]>([])
+
+  const [therapists, setTherapists] = useState<any[]>([])
+  const [therapistId, setTherapistId] = useState<number | null>(null)
 
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState("")
@@ -23,6 +26,7 @@ export default function BookPage() {
     "15:00",
   ]
 
+  // 🔹 BOOKED TIMES
   const fetchBookedTimes = async (selectedDate: string) => {
     const { data } = await supabase
       .from("appointments")
@@ -33,6 +37,20 @@ export default function BookPage() {
       setBookedTimes(data.map((d) => d.time))
     }
   }
+
+  // 🔹 THERAPISTS
+  const fetchTherapists = async () => {
+    const { data } = await supabase
+      .from("therapists")
+      .select("*")
+      .eq("active", true)
+
+    setTherapists(data ?? [])
+  }
+
+  useEffect(() => {
+    fetchTherapists()
+  }, [])
 
   const handleSubmit = async (e: any) => {
     e.preventDefault()
@@ -45,6 +63,7 @@ export default function BookPage() {
     setLoading(true)
     setMessage("")
 
+    // duplicate check
     const { data: existing } = await supabase
       .from("appointments")
       .select("*")
@@ -57,11 +76,13 @@ export default function BookPage() {
       return
     }
 
+    // insert
     const { error } = await supabase.from("appointments").insert({
       name,
       date,
       time,
       service,
+      therapist_id: therapistId,
     })
 
     setLoading(false)
@@ -77,6 +98,7 @@ export default function BookPage() {
     setDate("")
     setTime("")
     setService("")
+    setTherapistId(null)
   }
 
   return (
@@ -88,20 +110,19 @@ export default function BookPage() {
         alignItems: "center",
         background: "linear-gradient(135deg, #f5f5f5, #eaeaea)",
         fontFamily: "Arial",
-        padding: "20px"
+        padding: "20px",
       }}
     >
       <div
         style={{
           width: "100%",
-          maxWidth: "480px",
+          maxWidth: "500px",
           background: "white",
           padding: "30px",
           borderRadius: "20px",
-          boxShadow: "0 15px 40px rgba(0,0,0,0.12)"
+          boxShadow: "0 15px 40px rgba(0,0,0,0.12)",
         }}
       >
-        {/* HEADER */}
         <h1 style={{ textAlign: "center", marginBottom: "5px" }}>
           Termin buchen
         </h1>
@@ -110,7 +131,6 @@ export default function BookPage() {
           Wählen Sie Datum, Zeit und Behandlung
         </p>
 
-        {/* MESSAGE */}
         {message && (
           <div
             style={{
@@ -119,7 +139,7 @@ export default function BookPage() {
               borderRadius: "8px",
               background: "#f3f3f3",
               textAlign: "center",
-              fontSize: "14px"
+              fontSize: "14px",
             }}
           >
             {message}
@@ -149,12 +169,52 @@ export default function BookPage() {
             style={inputStyle}
           />
 
+          {/* THERAPIST SELECT */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
+            <button
+              type="button"
+              onClick={() => setTherapistId(null)}
+              style={{
+                padding: "10px",
+                borderRadius: "10px",
+                border:
+                  therapistId === null
+                    ? "2px solid black"
+                    : "1px solid #ddd",
+                background: therapistId === null ? "black" : "white",
+                color: therapistId === null ? "white" : "black",
+              }}
+            >
+              Egal
+            </button>
+
+            {therapists.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setTherapistId(t.id)}
+                style={{
+                  padding: "10px",
+                  borderRadius: "10px",
+                  border:
+                    therapistId === t.id
+                      ? "2px solid black"
+                      : "1px solid #ddd",
+                  background: therapistId === t.id ? "black" : "white",
+                  color: therapistId === t.id ? "white" : "black",
+                }}
+              >
+                {t.name}
+              </button>
+            ))}
+          </div>
+
           {/* TIME GRID */}
           <div
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(4, 1fr)",
-              gap: "10px"
+              gap: "10px",
             }}
           >
             {times.map((t) => {
@@ -169,7 +229,8 @@ export default function BookPage() {
                   style={{
                     padding: "10px",
                     borderRadius: "10px",
-                    border: time === t ? "2px solid black" : "1px solid #ddd",
+                    border:
+                      time === t ? "2px solid black" : "1px solid #ddd",
                     background: isBooked
                       ? "#eee"
                       : time === t
@@ -181,7 +242,6 @@ export default function BookPage() {
                       ? "white"
                       : "black",
                     cursor: isBooked ? "not-allowed" : "pointer",
-                    fontSize: "14px"
                   }}
                 >
                   {t}
@@ -192,13 +252,13 @@ export default function BookPage() {
 
           {/* SERVICE */}
           <input
-            placeholder="Behandlung (z.B. KG, Massage...)"
+            placeholder="Behandlung"
             value={service}
             onChange={(e) => setService(e.target.value)}
             style={inputStyle}
           />
 
-          {/* BUTTON */}
+          {/* SUBMIT */}
           <button
             type="submit"
             disabled={loading}
@@ -210,7 +270,6 @@ export default function BookPage() {
               color: "white",
               fontWeight: "bold",
               cursor: "pointer",
-              marginTop: "10px"
             }}
           >
             {loading ? "Buchung..." : "Termin buchen"}
@@ -225,5 +284,5 @@ const inputStyle = {
   padding: "12px",
   borderRadius: "10px",
   border: "1px solid #ddd",
-  outline: "none"
+  outline: "none",
 }

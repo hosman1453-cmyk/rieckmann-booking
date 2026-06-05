@@ -9,7 +9,8 @@ import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin    from "@fullcalendar/daygrid";
 import timeGridPlugin   from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
-import type { DateClickArg, EventClickArg, EventInput } from "@fullcalendar/core";
+import type { EventClickArg, EventInput } from "@fullcalendar/core";
+import type { DateClickArg } from "@fullcalendar/interaction";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Therapist = { id: number; name: string; active?: boolean | null; color?: string | null; };
@@ -1181,7 +1182,7 @@ export default function AdminPage() {
                 locale="de"
                 initialDate={todayISO()}
                 navLinks={true}
-                navLinkDayClick={(date,jsEvent)=>{ openCtxAt(jsEvent.clientX,jsEvent.clientY,dateToISO(date),"08:00"); }}
+                navLinkDayClick={(date,jsEvent)=>{ const ev=jsEvent as MouseEvent; openCtxAt(ev.clientX,ev.clientY,dateToISO(date),"08:00"); }}
                 dateClick={handleDateClick}
                 eventClick={handleEventClick}
                 datesSet={arg=>setCalTitle(arg.view.title)}

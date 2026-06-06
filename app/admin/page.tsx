@@ -850,19 +850,64 @@ export default function AdminPage() {
                   <div className="dp-message">{aptDetails.message}</div>
                 </>}
                 {aptDetails.prescription_urls&&aptDetails.prescription_urls.length>0&&<>
-                  <div className="dp-divider"/>
-                  <div className="dp-lbl">Verordnung des Arztes</div>
-                  <div className="dp-files">
-                    {aptDetails.prescription_urls.map((url,i)=>{
-                      const isPdf=url.toLowerCase().includes(".pdf");
-                      return(
-                        <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="dp-file">
-                          {isPdf?"📄":"🖼️"} Dokument {i+1}
-                        </a>
-                      );
-                    })}
-                  </div>
-                </>}
+  <div className="dp-divider"/>
+  <div className="dp-lbl">Verordnung des Arztes</div>
+  <div className="dp-files">
+    {aptDetails.prescription_urls.map((url,i)=>{
+      const isPdf=url.toLowerCase().includes(".pdf");
+      const fileName = url.split('/').pop() || '';
+      
+      return(
+        <button 
+          key={i} 
+          onClick={async () => {
+            try {
+              const { data: { session } } = await supabase.auth.getSession();
+              const token = session?.access_token;
+              
+              if (!token) {
+                alert('Bitte erneut anmelden.');
+                return;
+              }
+              
+              const response = await fetch('/api/prescription', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ fileName })
+              });
+              
+              if (!response.ok) {
+                alert('Dokument konnte nicht geladen werden.');
+                return;
+              }
+              
+              const { signedUrl } = await response.json();
+              window.open(signedUrl, '_blank');
+              
+            } catch (err) {
+              alert('Fehler beim Laden des Dokuments.');
+            }
+          }}
+          className="dp-file"
+          style={{ 
+            cursor: 'pointer', 
+            border: 'none', 
+            width: '100%', 
+            textAlign: 'left',
+            background: 'transparent',
+            fontFamily: 'inherit',
+            fontSize: 'inherit'
+          }}
+        >
+          {isPdf?"📄":"🖼️"} Dokument {i+1} öffnen
+        </button>
+      );
+    })}
+  </div>
+</>}
                 {!aptDetails.patient_name&&!aptDetails.patient_phone&&!aptDetails.message&&
                   <div className="dp-empty">Keine Patientendaten vorhanden.</div>
                 }

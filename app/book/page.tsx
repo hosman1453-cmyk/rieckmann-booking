@@ -17,7 +17,6 @@ function sanitizeText(input: string): string {
 function sanitizeEmail(input: string): string {
   const r=/^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/; const t=input.trim(); return r.test(t)?t:""
 }
-function sanitizePhone(input: string): string { return input.replace(/[^0-9+\-() ]/g,"").trim().slice(0,30) }
 function validateName(name: string): boolean { return name.trim().length>0&&name.trim().length<=100&&!/<|>|script/i.test(name) }
 const submissionTimestamps: number[] = []
 function checkRateLimit(): boolean {
@@ -93,17 +92,6 @@ function sameTherapist(a:number|null|undefined,b:number|null|undefined):boolean{
 }
 function hasConflict(slot:string,req:number,tid:number,booked:BookedEntry[],date:string,isHB:boolean):boolean{
   const needed=getSlotTimeRange(slot,req,isHB)
-  if(!needed)return true
-  return booked.some(b=>{
-    if(!sameTherapist(b.therapist_id,tid))return false
-    if(b.date&&b.date!==date)return false
-    const existing=parseTimeRange(b.time)
-    if(!existing)return false
-    return timeRangesOverlap(needed,existing)
-  })
-}
-function hasTimeConflict(tid:number,date:string,timeStr:string,booked:BookedEntry[]):boolean{
-  const needed=parseTimeRange(timeStr)
   if(!needed)return true
   return booked.some(b=>{
     if(!sameTherapist(b.therapist_id,tid))return false
@@ -221,8 +209,19 @@ export default function BookPage() {
     if(therapistId!==null&&!therapistsForBooking.some(t=>t.id===therapistId)) setTherapistId(null)
   },[therapistId,therapistsForBooking])
 
-  const fetchBooked=async(date:string)=>{ if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return; const{data}=await supabase.from("appointments").select("*").eq("date",date); setBooked(data||[]) }
-  const fetchBlocksForDate=async(date:string)=>{ if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return; const{data}=await supabase.from("blocks").select("*").eq("date",date); setBlocks(p=>[...p.filter(b=>b.date!==date),...(data||[])]) }
+  const fetchBooked=async(date:string)=>{
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return
+    try{
+      const res=await fetch(`/api/availability?date=${encodeURIComponent(date)}`)
+      if(!res.ok)return
+      const data=await res.json()
+      setBooked(data.booked||[])
+      setBlocks(p=>[...p.filter(b=>b.date!==date),...(data.blocks||[])])
+    }catch{
+      setBooked([])
+    }
+  }
+  const fetchBlocksForDate=async(date?:string)=>{ void date }
 
   const calendarDays=useMemo(()=>{
     const y=currentMonth.getFullYear(); const mo=currentMonth.getMonth()
@@ -321,81 +320,41 @@ export default function BookPage() {
       prescriptionUrls=await uploadPrescriptions(); setUploadingFiles(false)
     }
 
-    // 2. Insert appointments — use exact column names from DB
-    const safePhone = sanitizePhone(phone)
-    const baseCols = {
-      name:             sanitizeText(name.trim()),
-      email:            validEmail,
-      phone:            safePhone,
-      service:          validService.title,
-      insurance:        insurance as string,
-      message:          message ? sanitizeText(message) : null,
-      privacy_accepted: dsgvo,
-      prescription_files: prescriptionUrls.length > 0 ? prescriptionUrls : null,
-    }
-    const insertData = appointments.length > 0
-      ? appointments.map(apt => ({
-          ...baseCols,
-          date: apt.date,
-          time: getDisplaySlot(apt.time,req,isHausbesuch),
-          ...(apt.therapistId !== null ? { therapist_id: apt.therapistId } : { therapist_id: null }),
-        }))
-      : [{
-          ...baseCols,
-          date: activeDate,
-          time: getDisplaySlot(time,req,isHausbesuch),
-          therapist_id: therapistId,
-        }]
+    const bookingAppointments = appointments.length > 0
+      ? appointments
+      : [{ date: activeDate, time, therapistId }]
 
-    const datedApts=insertData.filter(a=>a.therapist_id!=null)
-    if(datedApts.length>0){
-      const dates=[...new Set(datedApts.map(a=>a.date))]
-      const existing:BookedEntry[]=[]
-      for(const d of dates){
-        const{data}=await supabase.from("appointments").select("therapist_id,date,time").eq("date",d)
-        existing.push(...((data??[]) as BookedEntry[]))
-      }
-      const seen:BookedEntry[]=[...existing]
-      for(const apt of datedApts){
-        const tid=Number(apt.therapist_id)
-        if(hasTimeConflict(tid,apt.date,apt.time,seen)){
-          setLoading(false)
-          setStatusMsg("❌ Terminkonflikt: Der Therapeut ist zu dieser Zeit bereits gebucht.")
-          return
-        }
-        seen.push({therapist_id:tid,date:apt.date,time:apt.time})
-      }
-    }
-
-    let insertedIds: string[] = []
     try {
-      const { data, error } = await supabase
-        .from("appointments")
-        .insert(insertData)
-        .select("id")
-      if (error) { setLoading(false); setStatusMsg(`❌ Fehler: ${error.message}`); console.error("Insert error:", error); return }
-      insertedIds = (data || []).map((r: any) => String(r.id))
-    } catch(err) { setLoading(false); setStatusMsg("❌ Netzwerkfehler."); console.error(err); return }
-
-    // 3. Insert appointment_details (extended info)
-    for (const aptId of insertedIds) {
-      const { error: detErr } = await supabase.from("appointment_details").insert({
-        appointment_id: aptId,
-        patient_name:   sanitizeText(name.trim()),
-        patient_email:  validEmail,
-        patient_phone:  safePhone,
-        message:        message ? sanitizeText(message) : null,
-        dsgvo_accepted: dsgvo,
-        prescription_urls: prescriptionUrls.length > 0 ? prescriptionUrls : null,
+      const response = await fetch("/api/book", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          insurance,
+          serviceTitle: validService.title,
+          appointments: bookingAppointments,
+          name,
+          email: validEmail,
+          phone,
+          message,
+          dsgvo,
+          prescriptionUrls,
+        }),
       })
-      if (detErr) console.warn("appointment_details insert error:", detErr)
+      const data = await response.json().catch(()=>null)
+      if(!response.ok){
+        setLoading(false)
+        setStatusMsg(data?.error==="Requested slot is unavailable"?"❌ Terminkonflikt: Der Therapeut ist zu dieser Zeit bereits gebucht.":"❌ Buchung konnte nicht gespeichert werden.")
+        return
+      }
+    } catch {
+      setLoading(false); setStatusMsg("❌ Netzwerkfehler."); return
     }
 
     setStatusMsg("📧 E-Mail wird gesendet…")
-    const aptWithNames=insertData.map(apt=>({...apt,therapistName:(apt as any).therapist_id?therapists.find(t=>t.id===(apt as any).therapist_id)?.name||"Egal":"Egal"}))
+    const aptWithNames=bookingAppointments.map(apt=>({...apt,time:getDisplaySlot(apt.time,req,isHausbesuch),therapistName:apt.therapistId?therapists.find(t=>t.id===apt.therapistId)?.name||"Egal":"Egal"}))
     const ok=await sendEmail(aptWithNames)
     setLoading(false)
-    setStatusMsg(ok?`✅ ${insertData.length} Termin(e) gebucht! Bestätigung gesendet.`:`✅ ${insertData.length} Termin(e) gebucht! ⚠️ E-Mail konnte nicht gesendet werden.`)
+    setStatusMsg(ok?`✅ ${bookingAppointments.length} Termin(e) gebucht! Bestätigung gesendet.`:`✅ ${bookingAppointments.length} Termin(e) gebucht! ⚠️ E-Mail konnte nicht gesendet werden.`)
     // Reset
     setStep(1);setInsurance("");setService(null);setName("");setEmail("");setPhone("");setMessage("");setDsgvo(false);setPrescriptionFiles([])
     setActiveDate("");setSelectedDates([]);setAppointments([]);setTime("");setSessionType(null);setTherapistId(null);setCurrentMonth(new Date());setShowHausbesuchLocations(false)

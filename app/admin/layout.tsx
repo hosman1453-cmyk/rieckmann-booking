@@ -11,11 +11,14 @@ export default async function AdminLayout({
   try {
     await requireAdmin();
   } catch (error) {
-    if (
-      error instanceof AdminAuthError &&
-      (error.status === 401 || error.status === 403)
-    ) {
-      redirect("/login");
+    if (error instanceof AdminAuthError) {
+      if (error.status === 401) {
+        redirect("/login");
+      }
+
+      if (error.status === 403) {
+        redirect("/unauthorized");
+      }
     }
 
     throw error;

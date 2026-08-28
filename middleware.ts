@@ -43,10 +43,6 @@ export async function middleware(req: NextRequest) {
   }
 
   // Login olmuş biri tekrar login sayfasına giderse admin'e at
-  if (req.nextUrl.pathname === "/login" && user) {
-    return NextResponse.redirect(new URL("/admin", req.url));
-  }
-
   return res;
 }
 

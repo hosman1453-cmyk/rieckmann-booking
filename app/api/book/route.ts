@@ -24,6 +24,7 @@ import {
   selbstzahlerServices,
   validateName,
 } from "@/lib/booking-rules";
+import { consumeBookingRateLimit } from "@/lib/booking-rate-limit";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
@@ -88,6 +89,25 @@ function parsePrescriptionUrls(value: unknown): string[] | null {
 }
 
 export async function POST(request: Request) {
+  try {
+    const rateLimit = await consumeBookingRateLimit(request);
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: "Too many booking attempts. Please try again later." },
+        {
+          status: 429,
+          headers:
+            rateLimit.retryAfterSeconds > 0
+              ? { "Retry-After": String(rateLimit.retryAfterSeconds) }
+              : undefined,
+        }
+      );
+    }
+  } catch {
+    console.error("Booking rate limit check failed");
+    return jsonError("Booking could not be processed", 500);
+  }
+
   let body: BookingRequest;
   try {
     const parsed = await request.json();

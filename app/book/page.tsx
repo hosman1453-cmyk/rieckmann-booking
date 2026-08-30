@@ -7,9 +7,11 @@ type Insurance = "gesetzlich" | "privat" | "selbstzahler" | "hausbesuch_peterhau
 type SessionType = "morning" | "afternoon"
 
 interface ServiceItem { title: string; subtitle: string; duration: string; price?: string; }
+interface Therapist { id: number; name: string; active?: boolean | null; }
 interface TherapistHours { therapist_id: number; day_of_week: number; start_time: string; end_time: string; is_working: boolean; }
 interface Verfuegbar { therapist_id: number; day_of_week: number; start_time: string; end_time: string; is_available: boolean; }
 interface HausbesuchSetting { therapist_id: number; region: string; day_of_week: number; start_time: string; end_time: string; is_active: boolean; }
+interface BlockedRange { therapist_id: number; date: string; start_time: string; end_time: string; }
 
 function sanitizeText(input: string): string {
   return input.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#x27;").trim()
@@ -59,7 +61,7 @@ function isSlotInWorkingHours(slot:string,req:number,tid:number,date:string,verf
   if(!h||!h.is_working)return false
   return ss>=timeToMinutes(h.start_time)&&se<=timeToMinutes(h.end_time)
 }
-function isSlotBlocked(slot:string,req:number,tid:number,date:string,blocks:any[],isHB:boolean):boolean{
+function isSlotBlocked(slot:string,req:number,tid:number,date:string,blocks:BlockedRange[],isHB:boolean):boolean{
   if(!date)return false
   const slots=isHB?HAUSBESUCH_SLOTS:BASE_SLOTS; const idx=getSlotIndex(slot,isHB); if(idx===-1)return false
   const needed=slots.slice(idx,idx+req)
@@ -107,12 +109,12 @@ function getSlotsForDuration(d:string,isHB:boolean):string[]{
 }
 function getMorningSlots(d:string,isHB:boolean):string[]{ return getSlotsForDuration(d,isHB).filter(s=>parseInt(s.split(":")[0])>=7&&parseInt(s.split(":")[0])<12) }
 function getAfternoonSlots(d:string,isHB:boolean):string[]{ return getSlotsForDuration(d,isHB).filter(s=>parseInt(s.split(":")[0])>=12&&parseInt(s.split(":")[0])<21) }
-function isSlotAvailable(slot:string,req:number,tid:number|null,booked:BookedEntry[],therapists:any[],verfuegbar:Verfuegbar[],hours:TherapistHours[],blocks:any[],date:string,isHB:boolean,hbSettings:HausbesuchSetting[],hbRegion:string|null):boolean{
+function isSlotAvailable(slot:string,req:number,tid:number|null,booked:BookedEntry[],therapists:Therapist[],verfuegbar:Verfuegbar[],hours:TherapistHours[],blocks:BlockedRange[],date:string,isHB:boolean,hbSettings:HausbesuchSetting[],hbRegion:string|null):boolean{
   const slots=isHB?HAUSBESUCH_SLOTS:BASE_SLOTS; const idx=getSlotIndex(slot,isHB); if(idx===-1||idx+req>slots.length)return false
   if(tid!==null)return isSlotInWorkingHours(slot,req,tid,date,verfuegbar,hours,isHB,hbSettings,hbRegion)&&!isSlotBlocked(slot,req,tid,date,blocks,isHB)&&!hasConflict(slot,req,tid,booked,date,isHB)
   return therapists.some(t=>isSlotInWorkingHours(slot,req,t.id,date,verfuegbar,hours,isHB,hbSettings,hbRegion)&&!isSlotBlocked(slot,req,t.id,date,blocks,isHB)&&!hasConflict(slot,req,t.id,booked,date,isHB))
 }
-function getAvailableTherapists(slot:string,req:number,booked:BookedEntry[],therapists:any[],verfuegbar:Verfuegbar[],hours:TherapistHours[],blocks:any[],date:string,isHB:boolean,hbSettings:HausbesuchSetting[],hbRegion:string|null):any[]{
+function getAvailableTherapists(slot:string,req:number,booked:BookedEntry[],therapists:Therapist[],verfuegbar:Verfuegbar[],hours:TherapistHours[],blocks:BlockedRange[],date:string,isHB:boolean,hbSettings:HausbesuchSetting[],hbRegion:string|null):Therapist[]{
   const slots=isHB?HAUSBESUCH_SLOTS:BASE_SLOTS; const idx=getSlotIndex(slot,isHB); if(idx===-1||idx+req>slots.length)return[]
   return therapists.filter(t=>isSlotInWorkingHours(slot,req,t.id,date,verfuegbar,hours,isHB,hbSettings,hbRegion)&&!isSlotBlocked(slot,req,t.id,date,blocks,isHB)&&!hasConflict(slot,req,t.id,booked,date,isHB))
 }
@@ -164,18 +166,18 @@ export default function BookPage() {
   const [insurance, setInsurance] = useState<Insurance|"">("")
   const [service, setService] = useState<ServiceItem|null>(null)
   const [therapistId, setTherapistId] = useState<number|null>(null)
-  const [therapists, setTherapists] = useState<any[]>([])
+  const [therapists, setTherapists] = useState<Therapist[]>([])
   const [therapistHours, setTherapistHours] = useState<TherapistHours[]>([])
   const [verfuegbar, setVerfuegbar] = useState<Verfuegbar[]>([])
   const [hausbesuchSettings, setHausbesuchSettings] = useState<HausbesuchSetting[]>([])
-  const [blocks, setBlocks] = useState<any[]>([])
+  const [blocks, setBlocks] = useState<BlockedRange[]>([])
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [selectedDates, setSelectedDates] = useState<string[]>([])
   const [activeDate, setActiveDate] = useState("")
   const [appointments, setAppointments] = useState<Array<{date:string;time:string;therapistId:number|null}>>([])
   const [sessionType, setSessionType] = useState<SessionType|null>(null)
   const [time, setTime] = useState("")
-  const [booked, setBooked] = useState<any[]>([])
+  const [booked, setBooked] = useState<BookedEntry[]>([])
   // Step 5 fields
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
@@ -272,7 +274,7 @@ export default function BookPage() {
     const urls:string[]=[]
     for(const file of prescriptionFiles){
       const fileName=`${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g,"_")}`
-      const{data,error}=await supabase.storage.from("prescriptions").upload(fileName,file,{cacheControl:"3600",upsert:false})
+      const{error}=await supabase.storage.from("prescriptions").upload(fileName,file,{cacheControl:"3600",upsert:false})
       if(error){console.error("Upload error:",error);continue}
       const{data:urlData}=supabase.storage.from("prescriptions").getPublicUrl(fileName)
       if(urlData?.publicUrl) urls.push(urlData.publicUrl)
@@ -280,7 +282,8 @@ export default function BookPage() {
     return urls
   }
 
-  const sendEmail=async(aptData:any[])=>{
+  type EmailAppointment = { date: string; time: string; therapistName?: string };
+  const sendEmail=async(aptData:EmailAppointment[])=>{
     try{
       const html=`<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
         <div style="background:linear-gradient(135deg,#667eea,#764ba2);padding:30px;border-radius:16px 16px 0 0;text-align:center;"><h1 style="color:white;margin:0;">📅 Terminbestätigung</h1></div>

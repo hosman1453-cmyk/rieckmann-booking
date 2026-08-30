@@ -25,6 +25,7 @@ type SidePanel = "calendar" | "patients" | "therapists" | "stats" | "settings";
 type Toast = { id: string; type: "success" | "error" | "info"; message: string; };
 type ContextMenu = { x: number; y: number; date: string; time: string; } | null;
 type SelectedEvent = { id: string; title: string; therapistName: string; isBlock: boolean; } | null;
+type Stat = { therapist_id: number; therapist_name: string; total: number; last30: number; next7: number; weeklyH: number; occupancy: number; };
 type AppointmentDetails = {
   id: number;
   appointment_id: number;
@@ -113,7 +114,7 @@ export default function AdminPage() {
   const [hours, setHours] = useState<TherapistHours[]>([]);
   const [verfuegbar, setVerfuegbar] = useState<Verfuegbar[]>([]);
   const [hausbesuch, setHausbesuch] = useState<HausbesuchSetting[]>([]);
-  const [stats, setStats] = useState<any[]>([]);
+  const [stats, setStats] = useState<Stat[]>([]);
   const [allAppointments, setAllAppointments] = useState<Appointment[]>([]);
 
   const [selTherapists, setSelTherapists] = useState<Set<number>>(new Set());
@@ -505,11 +506,6 @@ export default function AdminPage() {
   },[scheduleModal,scheduleTab,hoursEdit,verfuegEdit,applyToAllWeeks,ensureAuth,fetchHours,fetchVerfuegbar,fetchTherapists,fetchBlocks,toast]);
 
   // ── Add therapist ─────────────────────────────────────────────────────────
-  const REGIONS = [
-    {id:"peterhausen",label:"Peterhausen",icon:"📍"},
-    {id:"allensbach",label:"Allensbach",icon:"📍"},
-    {id:"reichenau",label:"Reichenau",icon:"📍"},
-  ];
   const DAYS_FULL_HB = ["Sonntag","Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag"];
 
   const openHausbesuchModal=(t:Therapist)=>{
@@ -887,7 +883,7 @@ export default function AdminPage() {
               const { signedUrl } = await response.json();
               window.open(signedUrl, '_blank');
               
-            } catch (err) {
+            } catch {
               alert('Fehler beim Laden des Dokuments.');
             }
           }}
@@ -997,7 +993,7 @@ export default function AdminPage() {
             <div className="th-list">
               {therapists.map(t=>(
                 <label key={t.id} className={`th-row${selTherapists.has(t.id)?" chk":""}`}>
-                  <input type="checkbox" checked={selTherapists.has(t.id)} onChange={()=>setSelTherapists(p=>{ const n=new Set(p); n.has(t.id)?n.delete(t.id):n.add(t.id); return n; })}/>
+                  <input type="checkbox" checked={selTherapists.has(t.id)} onChange={()=>setSelTherapists(p=>{ const n=new Set(p); if(n.has(t.id)){ n.delete(t.id); } else { n.add(t.id); } return n; })}/>
                   <span className="cdot" style={{background:colorMap[t.id]}}/>
                   <span className="th-name">{t.name}</span>
                   {selTherapists.has(t.id)&&<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
@@ -1035,7 +1031,7 @@ export default function AdminPage() {
                   <div className="p-avatar">{p.name.slice(0,1).toUpperCase()}</div>
                   <div style={{flex:1}}>
                     <div className="p-name">{p.name}</div>
-                    {(p as any).phone&&<div className="p-meta">📞 {(p as any).phone}</div>}
+                    {p.phone&&<div className="p-meta">📞 {p.phone}</div>}
                     {p.email&&<div className="p-meta">✉️ {p.email}</div>}
                     {lastService&&<div className="p-meta p-service">🩺 {lastService}</div>}
                     <div className="p-meta p-count-lbl">{pAppts.length} Termin{pAppts.length!==1?"e":""}</div>

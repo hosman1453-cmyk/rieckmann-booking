@@ -114,7 +114,6 @@ export default function AdminPage() {
   const [hours, setHours] = useState<TherapistHours[]>([]);
   const [verfuegbar, setVerfuegbar] = useState<Verfuegbar[]>([]);
   const [hausbesuch, setHausbesuch] = useState<HausbesuchSetting[]>([]);
-  const [stats, setStats] = useState<Stat[]>([]);
   const [allAppointments, setAllAppointments] = useState<Appointment[]>([]);
 
   const [selTherapists, setSelTherapists] = useState<Set<number>>(new Set());
@@ -252,10 +251,11 @@ export default function AdminPage() {
     setHausbesuch((data??[]) as HausbesuchSetting[]);
   },[toast]);
 
-  const fetchStats = useCallback(async (tList: Therapist[], appts: Appointment[])=>{
+  const stats = useMemo<Stat[]>(()=>{
+    if (!therapists.length || !allAppointments.length) return [];
     // Compute stats client-side to avoid view dependency
-    const statsData = tList.map(t=>{
-      const tAppts = appts.filter(a=>a.therapist_id===t.id);
+    return therapists.map(t=>{
+      const tAppts = allAppointments.filter(a=>a.therapist_id===t.id);
       const now = new Date(); const today = dateToISO(now);
       const d30 = new Date(now); d30.setDate(d30.getDate()-30); const d30s = dateToISO(d30);
       const d7f = new Date(now); d7f.setDate(d7f.getDate()+7); const d7s = dateToISO(d7f);
@@ -270,20 +270,18 @@ export default function AdminPage() {
       const occupancy = weeklySlots > 0 ? Math.round(Math.min((next7/weeklySlots)*100,100)) : 0;
       return { therapist_id:t.id, therapist_name:t.name, total:tAppts.length, last30, next7, weeklyH:Math.round(weeklyH*10)/10, occupancy };
     });
-    setStats(statsData);
-  },[hours]);
+  },[therapists, allAppointments, hours]);
 
   const reload = useCallback(async ()=>{
     setLoading(true);
     const ok = await ensureAuth(); if(!ok) return;
     const tList = await fetchTherapists();
-    const [,,,appts] = await Promise.all([fetchBlocks(tList), fetchPatients(), fetchHours(), (async()=>{ const {data} = await supabase.from("appointments").select("id,name,service,date,time,therapist_id"); return (data??[]) as Appointment[]; })()]);
+    await Promise.all([fetchBlocks(tList), fetchPatients(), fetchHours()]);
     await fetchAppointments(tList);
     await fetchVerfuegbar();
     await fetchHausbesuch();
-    if (appts) await fetchStats(tList, appts);
     setLoading(false);
-  },[ensureAuth,fetchTherapists,fetchAppointments,fetchBlocks,fetchPatients,fetchHours,fetchVerfuegbar,fetchHausbesuch,fetchStats]);
+  },[ensureAuth,fetchTherapists,fetchAppointments,fetchBlocks,fetchPatients,fetchHours,fetchVerfuegbar,fetchHausbesuch]);
 
   useEffect(()=>{
     (async()=>{
@@ -293,11 +291,6 @@ export default function AdminPage() {
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
-
-  // Re-compute stats when hours or allAppointments change
-  useEffect(()=>{
-    if (therapists.length && allAppointments.length) fetchStats(therapists, allAppointments);
-  },[therapists, allAppointments, hours, fetchStats]);
 
   useEffect(()=>{
     const h=(e:KeyboardEvent)=>{

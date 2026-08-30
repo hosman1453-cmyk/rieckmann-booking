@@ -199,6 +199,9 @@ export default function BookPage() {
     return therapists.filter(t=>ids.has(t.id))
   },[therapists,hausbesuchSettings,isHausbesuch,hbRegion])
 
+  const selectedTherapistStillAvailable = therapistId===null||therapistsForBooking.some(t=>t.id===therapistId)
+  const effectiveTherapistId = selectedTherapistStillAvailable ? therapistId : null
+
   useEffect(()=>{
     supabase.from("therapists").select("*").eq("active",true).then(({data})=>setTherapists(data||[]))
     supabase.from("therapist_hours").select("therapist_id,day_of_week,start_time,end_time,is_working").then(({data})=>setTherapistHours((data||[]) as TherapistHours[]))
@@ -206,10 +209,6 @@ export default function BookPage() {
     supabase.from("hausbesuch_settings").select("therapist_id,region,day_of_week,start_time,end_time,is_active").eq("is_active",true)
       .then(({data,error})=>{ if(!error) setHausbesuchSettings((data??[]) as HausbesuchSetting[]) })
   },[])
-
-  useEffect(()=>{
-    if(therapistId!==null&&!therapistsForBooking.some(t=>t.id===therapistId)) setTherapistId(null)
-  },[therapistId,therapistsForBooking])
 
   const fetchBooked=async(date:string)=>{
     if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return
@@ -240,11 +239,11 @@ export default function BookPage() {
     const ds=makeDateStr(day); const dow=new Date(ds+"T12:00:00").getDay()
     if(isHausbesuch&&hbRegion){
       const dayHb=hausbesuchSettings.filter(h=>h.region===hbRegion&&h.day_of_week===dow&&h.is_active)
-      if(therapistId!==null) return dayHb.some(h=>h.therapist_id===therapistId)
+      if(effectiveTherapistId!==null) return dayHb.some(h=>h.therapist_id===effectiveTherapistId)
       const bookableIds=new Set(therapistsForBooking.map(t=>t.id))
       return dayHb.some(h=>bookableIds.has(h.therapist_id))
     }
-    if(therapistId!==null){ const vR=verfuegbar.filter(v=>v.therapist_id===therapistId&&v.day_of_week===dow&&v.is_available); if(vR.length>0)return true; const h=therapistHours.find(x=>x.therapist_id===therapistId&&x.day_of_week===dow); return!!(h&&h.is_working) }
+    if(effectiveTherapistId!==null){ const vR=verfuegbar.filter(v=>v.therapist_id===effectiveTherapistId&&v.day_of_week===dow&&v.is_available); if(vR.length>0)return true; const h=therapistHours.find(x=>x.therapist_id===effectiveTherapistId&&x.day_of_week===dow); return!!(h&&h.is_working) }
     return verfuegbar.some(v=>v.day_of_week===dow&&v.is_available)||therapistHours.some(h=>h.day_of_week===dow&&h.is_working)
   }
 
@@ -259,15 +258,15 @@ export default function BookPage() {
   const rawSlots=sessionType==="morning"?getMorningSlots(service?.duration||"20 Min.",isHausbesuch):sessionType==="afternoon"?getAfternoonSlots(service?.duration||"20 Min.",isHausbesuch):[]
   const mergedBooked=useMemo(():BookedEntry[]=>{
     const pending=appointments
-      .filter(a=>a.therapistId!=null)
+      .filter(a=>a.therapistId!=null&&therapistsForBooking.some(t=>t.id===a.therapistId))
       .map(a=>({therapist_id:a.therapistId,date:a.date,time:getDisplaySlot(a.time,req,isHausbesuch)}))
     return [...booked.map(b=>({therapist_id:b.therapist_id,date:b.date,time:b.time})),...pending]
-  },[booked,appointments,req,isHausbesuch])
+  },[booked,appointments,req,isHausbesuch,therapistsForBooking])
   const bookedForActiveDate=useMemo(
     ()=>activeDate?mergedBooked.filter(b=>!b.date||b.date===activeDate):mergedBooked,
     [mergedBooked,activeDate],
   )
-  const activeSlots=rawSlots.filter(slot=>isSlotAvailable(slot,req,therapistId,bookedForActiveDate,therapistsForBooking,verfuegbar,therapistHours,blocks,activeDate,isHausbesuch,hausbesuchSettings,hbRegion))
+  const activeSlots=rawSlots.filter(slot=>isSlotAvailable(slot,req,effectiveTherapistId,bookedForActiveDate,therapistsForBooking,verfuegbar,therapistHours,blocks,activeDate,isHausbesuch,hausbesuchSettings,hbRegion))
 
   // Upload prescription files to Supabase Storage
   const uploadPrescriptions=async():Promise<string[]>=>{
@@ -323,9 +322,13 @@ export default function BookPage() {
       prescriptionUrls=await uploadPrescriptions(); setUploadingFiles(false)
     }
 
-    const bookingAppointments = appointments.length > 0
+    const bookingAppointments = (appointments.length > 0
       ? appointments
-      : [{ date: activeDate, time, therapistId }]
+      : [{ date: activeDate, time, therapistId: effectiveTherapistId }]
+    ).map(apt=>({
+      ...apt,
+      therapistId: apt.therapistId!==null&&therapistsForBooking.some(t=>t.id===apt.therapistId) ? apt.therapistId : null,
+    }))
 
     try {
       const response = await fetch("/api/book", {
@@ -440,9 +443,9 @@ export default function BookPage() {
             ):(
             <div className="therapist-grid">
               {(!isHausbesuch||therapistsForBooking.length>1)&&(
-                <TherapistCard name="Egal" isSelected={therapistId===null} onClick={()=>{setTherapistId(null);setStep(4)}}/>
+                <TherapistCard name="Egal" isSelected={effectiveTherapistId===null} onClick={()=>{setTherapistId(null);setStep(4)}}/>
               )}
-              {therapistsForBooking.map(t=><TherapistCard key={t.id} name={t.name} isSelected={therapistId===t.id} onClick={()=>{setTherapistId(t.id);setStep(4)}}/>)}
+              {therapistsForBooking.map(t=><TherapistCard key={t.id} name={t.name} isSelected={effectiveTherapistId===t.id} onClick={()=>{setTherapistId(t.id);setStep(4)}}/>)}
             </div>
             )}
           </div>}
@@ -461,7 +464,7 @@ export default function BookPage() {
                   insurance
                 }</strong></div>
                 <div><span>Behandlung:</span> <strong>{service?.title}</strong> <span style={{opacity:.6,fontSize:"12px"}}>({service?.duration})</span></div>
-                <div><span>Therapeut:</span> <strong>{therapistId!==null?therapistsForBooking.find(t=>t.id===therapistId)?.name||therapists.find(t=>t.id===therapistId)?.name||"Egal":"Egal"}</strong></div>
+                <div><span>Therapeut:</span> <strong>{effectiveTherapistId!==null?therapistsForBooking.find(t=>t.id===effectiveTherapistId)?.name||therapists.find(t=>t.id===effectiveTherapistId)?.name||"Egal":"Egal"}</strong></div>
               </div>
             </div>
 
@@ -505,13 +508,13 @@ export default function BookPage() {
                   {sessionType&&<>
                     {activeSlots.length===0&&<div className="no-slots">Keine verfügbaren Zeiten.<br/><span style={{fontSize:"12px",opacity:.7}}>Anderen Tag oder Therapeuten wählen.</span></div>}
                     <div className="time-slots-grid">
-                      {therapistId===null
+                      {effectiveTherapistId===null
                         ?activeSlots.flatMap(slot=>{ const avail=getAvailableTherapists(slot,req,booked,therapistsForBooking,verfuegbar,therapistHours,blocks,activeDate,isHausbesuch,hausbesuchSettings,hbRegion); return avail.map(t=>(
-                            <button key={`${slot}__${t.id}`} onClick={()=>{setTime(slot);setTherapistId(t.id);setAppointments(p=>[...p.filter(a=>a.date!==activeDate),{date:activeDate,time:slot,therapistId:t.id}])}} className={`time-slot ${time===slot&&therapistId===t.id?"selected":""}`}>
+                            <button key={`${slot}__${t.id}`} onClick={()=>{setTime(slot);setTherapistId(t.id);setAppointments(p=>[...p.filter(a=>a.date!==activeDate),{date:activeDate,time:slot,therapistId:t.id}])}} className={`time-slot ${time===slot&&effectiveTherapistId===t.id?"selected":""}`}>
                               <div style={{fontWeight:600}}>{getDisplaySlot(slot,req,isHausbesuch)}</div><div style={{fontSize:"12px",opacity:.8}}>👤 {t.name}</div>
                             </button>)) })
                         :activeSlots.map(slot=>(
-                            <button key={slot} onClick={()=>{setTime(slot);setAppointments(p=>[...p.filter(a=>a.date!==activeDate),{date:activeDate,time:slot,therapistId}])}} className={`time-slot ${time===slot?"selected":""}`}>
+                            <button key={slot} onClick={()=>{setTime(slot);setAppointments(p=>[...p.filter(a=>a.date!==activeDate),{date:activeDate,time:slot,therapistId:effectiveTherapistId}])}} className={`time-slot ${time===slot?"selected":""}`}>
                               <div style={{fontWeight:600}}>{getDisplaySlot(slot,req,isHausbesuch)}</div><div style={{fontSize:"12px",opacity:.8}}>👤 Verfügbar</div>
                             </button>))
                       }
@@ -534,9 +537,9 @@ export default function BookPage() {
 
             <div className="summary-box" style={{marginBottom:20}}>
               <h3>Ausgewählte Termine</h3>
-              {(appointments.length>0?appointments:[{date:activeDate,time,therapistId}]).map((apt,i)=>(
+              {(appointments.length>0?appointments:[{date:activeDate,time,therapistId:effectiveTherapistId}]).map((apt,i)=>(
                 <div key={i} style={{fontSize:"13px",color:"#374151",marginBottom:4}}>
-                  📅 {new Date(apt.date).toLocaleDateString("de-DE")} · {getDisplaySlot(apt.time,req,isHausbesuch)} · {apt.therapistId?(therapistsForBooking.find(t=>t.id===apt.therapistId)||therapists.find(t=>t.id===apt.therapistId))?.name||"Egal":"Egal"}
+                  📅 {new Date(apt.date).toLocaleDateString("de-DE")} · {getDisplaySlot(apt.time,req,isHausbesuch)} · {apt.therapistId?therapistsForBooking.find(t=>t.id===apt.therapistId)?.name||"Egal":"Egal"}
                 </div>
               ))}
             </div>

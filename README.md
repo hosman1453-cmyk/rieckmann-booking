@@ -161,11 +161,11 @@ The main implementation claims are linked to their repository evidence below.
 
 Relevant implementation history:
 
-- [`94bc64d`](https://github.com/hosman1453-cmyk/rieckmann-booking/commit/94bc64d): secure public booking flow
-- [`2183d12`](https://github.com/hosman1453-cmyk/rieckmann-booking/commit/2183d12): role-aware admin authorization
-- [`3b479e0`](https://github.com/hosman1453-cmyk/rieckmann-booking/commit/3b479e0): admin-only RLS policies
-- [`e16a1dd`](https://github.com/hosman1453-cmyk/rieckmann-booking/commit/e16a1dd): booking rate limiting
-- [`2be5567`](https://github.com/hosman1453-cmyk/rieckmann-booking/commit/2be5567): Next.js security upgrade
+- [`94bc64d`](https://github.com/osman-karabenli/rieckmann-booking/commit/94bc64d): secure public booking flow
+- [`2183d12`](https://github.com/osman-karabenli/rieckmann-booking/commit/2183d12): role-aware admin authorization
+- [`3b479e0`](https://github.com/osman-karabenli/rieckmann-booking/commit/3b479e0): admin-only RLS policies
+- [`e16a1dd`](https://github.com/osman-karabenli/rieckmann-booking/commit/e16a1dd): booking rate limiting
+- [`2be5567`](https://github.com/osman-karabenli/rieckmann-booking/commit/2be5567): Next.js security upgrade
 
 ## Verification Scope
 

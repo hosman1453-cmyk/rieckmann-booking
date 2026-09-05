@@ -18,6 +18,20 @@ The application focuses on the core booking process: patients can choose service
 - Server-side booking rate limiting
 - HMAC-derived client identifiers for rate limiting instead of stored raw IP addresses
 
+## Screenshots
+
+All names, appointments, and schedule entries shown in the administration screenshot are fictional demo data created for portfolio documentation.
+
+### Public Booking Flow
+
+![Insurance selection](docs/screenshots/booking-step-1-insurance.png)
+
+![Treatment selection](docs/screenshots/booking-step-2-treatment.png)
+
+### Administration Calendar
+
+![Administration calendar with fictional demo data](docs/screenshots/admin-weekly-calendar-demo.png)
+
 ## Architecture
 
 ```text
@@ -143,7 +157,7 @@ The main implementation claims are linked to their repository evidence below.
 | Authenticated admin authorization | [`lib/admin-auth.ts`](lib/admin-auth.ts) and [`20260828130000_admin_authorization_expand.sql`](supabase/migrations/20260828130000_admin_authorization_expand.sql) | Authorization model implemented in source |
 | Admin-only Row Level Security | [`20260828131000_admin_authorization_contract.sql`](supabase/migrations/20260828131000_admin_authorization_contract.sql) | Migration contract included |
 | HMAC-based server-side booking rate limiting | [`lib/booking-rate-limit.ts`](lib/booking-rate-limit.ts) and [`20260829101000_fix_booking_rate_limit_timestamp.sql`](supabase/migrations/20260829101000_fix_booking_rate_limit_timestamp.sql) | Implemented in source; runtime metrics are not published |
-| Booking and administration interfaces | [`app/book/page.tsx`](app/book/page.tsx) and [`app/admin/page.tsx`](app/admin/page.tsx) | UI source is included; screenshots and a public demo are not currently included |
+| Booking and administration interfaces | [`app/book/page.tsx`](app/book/page.tsx), [`app/admin/page.tsx`](app/admin/page.tsx), and [`docs/screenshots/`](docs/screenshots/) | Screenshots use fictional demo data; no public live demo is included |
 
 Relevant implementation history:
 
